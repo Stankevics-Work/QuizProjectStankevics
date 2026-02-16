@@ -1,0 +1,183 @@
+-- ============================================
+-- DATU BĀZES QUIZDB IZVEIDE UN AIZPILDĪŠANA
+-- ============================================
+
+-- 1. TABULU IZVEIDE (paliek nemainīta)
+CREATE TABLE users (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100),
+    role VARCHAR(20) DEFAULT 'STUDENT',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE tests (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    description VARCHAR(1000),
+    topic VARCHAR(100),
+    created_by INT NOT NULL,
+    time_limit_minutes INT DEFAULT 60,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE questions (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    test_id INT NOT NULL,
+    question_text VARCHAR(500) NOT NULL,
+    question_type VARCHAR(20) DEFAULT 'SINGLE_CHOICE',
+    points INT DEFAULT 1,
+    FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE
+);
+
+CREATE TABLE answer_options (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    question_id INT NOT NULL,
+    option_text VARCHAR(200) NOT NULL,
+    is_correct BOOLEAN DEFAULT false,
+    option_order INT,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE test_results (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id INT NOT NULL,
+    test_id INT NOT NULL,
+    score INT DEFAULT 0,
+    max_score INT DEFAULT 0,
+    percentage DECIMAL(5,2),
+    grade VARCHAR(5),
+    time_spent_seconds INT,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (test_id) REFERENCES tests(id)
+);
+
+CREATE TABLE user_answers (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    result_id INT NOT NULL,
+    question_id INT NOT NULL,
+    selected_option_id INT,
+    is_correct BOOLEAN,
+    FOREIGN KEY (result_id) REFERENCES test_results(id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(id),
+    FOREIGN KEY (selected_option_id) REFERENCES answer_options(id)
+);
+
+-- ============================================
+-- DATU IEVADĪŠANA
+-- ============================================
+
+-- 1. Lietotāji (10 ieraksti) - paliek nemainīts
+INSERT INTO users (username, password, first_name, last_name, email, role) VALUES
+('admin', 'admin123', 'Adminis', 'Administrators', 'admin@skola.lv', 'ADMIN'),
+('skolotajs', 'skol123', 'Jānis', 'Skolotājs', 'skolotajs@skola.lv', 'TEACHER'),
+('janis.b', 'janis123', 'Jānis', 'Bērziņš', 'janis@skola.lv', 'STUDENT'),
+('anna.o', 'anna123', 'Anna', 'Ozola', 'anna@skola.lv', 'STUDENT'),
+('peteris.k', 'peter123', 'Pēteris', 'Kalniņš', 'peteris@skola.lv', 'STUDENT'),
+('liene.l', 'liene123', 'Liene', 'Liepa', 'liene@skola.lv', 'STUDENT'),
+('martins.z', 'martins123', 'Mārtiņš', 'Zariņš', 'martins@skola.lv', 'STUDENT'),
+('elina.j', 'elina123', 'Elīna', 'Jansone', 'elina@skola.lv', 'STUDENT'),
+('karlis.p', 'karlis123', 'Kārlis', 'Pētersons', 'karlis@skola.lv', 'STUDENT'),
+('ieva.b', 'ieva123', 'Ieva', 'Balode', 'ieva@skola.lv', 'STUDENT');
+
+-- 2. Testi (TIKAI 1 tests)
+INSERT INTO tests (title, description, topic, created_by, time_limit_minutes) VALUES
+('Java pamatu tests', 'Tests par Java programmēšanas pamatiem', 'Programmēšana', 2, 45);
+
+-- 3. Jautājumi (20 jautājumi tikai pirmajam testam)
+INSERT INTO questions (test_id, question_text, points) VALUES
+(1, 'Kas ir Java?', 1),
+(1, 'Kurš no šiem ir cikls Java valodā?', 1),
+(1, 'Kāda ir galvenā OOP princips?', 1),
+(1, 'Kas ir JVM?', 1),
+(1, 'Kurš no šiem ir datu tips Java?', 1),
+(1, 'Kas ir main metode?', 1),
+(1, 'Kā deklarē klasi Java?', 1),
+(1, 'Kas ir pārmantošana?', 1),
+(1, 'Kurš no šiem ir interfeiss?', 1),
+(1, 'Kas ir polimorfisms?', 1),
+(1, 'Kas ir JDK?', 1),
+(1, 'Kurš no šiem nav primitīvs datu tips Java?', 1),
+(1, 'Kas ir autoboxing Java?', 1),
+(1, 'Kāds ir parastais String klases objekta izmērs?', 1),
+(1, 'Kas ir final atslēgvārds?', 1),
+(1, 'Cik parametrus var iegūt main metode?', 1),
+(1, 'Kurš no šiem ir inkapsulācijas princips?', 1),
+(1, 'Kas ir abstrakta klase?', 1),
+(1, 'Kāda ir ArrayList un atšķirība?', 1),
+(1, 'Kas ir multithreading?', 1);
+
+-- 4. Atbilžu varianti (katram jautājumam 3 varianti)
+-- Jautājumi 1-20 (visi 20 jautājumi)
+INSERT INTO answer_options (question_id, option_text, is_correct, option_order) VALUES
+(1, 'Programmēšanas valoda', true, 1), (1, 'Operētājsistēma', false, 2), (1, 'Datu bāze', false, 3),
+(2, 'for', true, 1), (2, 'if', false, 2), (2, 'switch', false, 3),
+(3, 'Kapsulācija', false, 1), (3, 'Pārmantošana', true, 2), (3, 'Kompilācija', false, 3),
+(4, 'Java Virtual Machine', true, 1), (4, 'Java Visual Module', false, 2), (4, 'Java Variable Manager', false, 3),
+(5, 'int', true, 1), (5, 'String', false, 2), (5, 'Array', false, 3),
+(6, 'Programmas sākumpunkts', true, 1), (6, 'Datu tips', false, 2), (6, 'Cikls', false, 3),
+(7, 'public class Klase {}', true, 1), (7, 'class = Klase', false, 2), (7, 'new class Klase', false, 3),
+(8, 'Klases īpašību pārmantošana', true, 1), (8, 'Datu glabāšana', false, 2), (8, 'Mainīgā deklarēšana', false, 3),
+(9, 'Līgums par metodēm', true, 1), (9, 'Datu glabātuve', false, 2), (9, 'Mainīgais', false, 3),
+(10, 'Vairāku formu īpašība', true, 1), (10, 'Viena veida datu tips', false, 2), (10, 'Cikls', false, 3),
+(11, 'Java Development Kit', true, 1), (11, 'Java Debugging Key', false, 2), (11, 'Java Data Kernel', false, 3),
+(12, 'String', true, 1), (12, 'int', false, 2), (12, 'boolean', false, 3),
+(13, 'Primitīva tipa pārveidošana par objektu', true, 1), (13, 'Objekta dzēšana', false, 2), (13, 'Kompilācijas process', false, 3),
+(14, '40 baiti', true, 1), (14, '20 baiti', false, 2), (14, '60 baiti', false, 3),
+(15, 'Nevar mainīt', true, 1), (15, 'Dinamisks', false, 2), (15, 'Globāls', false, 3),
+(16, 'Vienu masīvu', true, 1), (16, 'Divi mainīgos', false, 2), (16, 'Trīs parametrus', false, 3),
+(17, 'Datu slēpšana', true, 1), (17, 'Datu dalīšana', false, 2), (17, 'Datu kopēšana', false, 3),
+(18, 'Klase, ko nevar instancēt', true, 1), (18, 'Galvenā klase', false, 2), (18, 'Pabeigta klase', false, 3),
+(19, 'Dinamiskais masīvs', true, 1), (19, 'Fiksēts izmērs', false, 2), (19, 'Primitīvs tips', false, 3),
+(20, 'Vairāku pavedienu izpilde', true, 1), (20, 'Viena programma', false, 2), (20, 'Viens process', false, 3);
+
+-- 5. Testa rezultāti (3 ieraksti tikai pirmajam testam)
+INSERT INTO test_results (user_id, test_id, score, max_score, percentage, grade, time_spent_seconds) VALUES
+(3, 1, 16, 20, 80.00, '8', 2400),
+(4, 1, 18, 20, 90.00, '9', 2200),
+(5, 1, 14, 20, 70.00, '7', 2600);
+
+-- 6. Lietotāju atbildes (tikai pirmajam testam)
+INSERT INTO user_answers (result_id, question_id, selected_option_id, is_correct) VALUES
+-- Pirmā lietotāja atbildes (16/20)
+(1, 1, 1, true), (1, 2, 4, true), (1, 3, 8, true), (1, 4, 10, true), (1, 5, 13, true),
+(1, 6, 16, true), (1, 7, 19, true), (1, 8, 22, true), (1, 9, 25, false), (1, 10, 28, false),
+(1, 11, 31, true), (1, 12, 34, true), (1, 13, 37, true), (1, 14, 40, true), (1, 15, 43, true),
+(1, 16, 46, false), (1, 17, 49, true), (1, 18, 52, true), (1, 19, 55, false), (1, 20, 58, true),
+-- Otrā lietotāja atbildes (18/20)
+(2, 1, 1, true), (2, 2, 4, true), (2, 3, 8, true), (2, 4, 10, true), (2, 5, 13, true),
+(2, 6, 16, true), (2, 7, 19, true), (2, 8, 22, true), (2, 9, 25, true), (2, 10, 28, true),
+(2, 11, 31, true), (2, 12, 34, true), (2, 13, 37, true), (2, 14, 40, true), (2, 15, 43, true),
+(2, 16, 46, true), (2, 17, 49, true), (2, 18, 52, true), (2, 19, 55, false), (2, 20, 58, true);
+
+-- ============================================
+-- PĀRBAUDE
+-- ============================================
+
+-- Skaitīt ierakstus
+SELECT 'users' AS tabula, COUNT(*) AS skaits FROM users
+UNION ALL
+SELECT 'tests', COUNT(*) FROM tests
+UNION ALL
+SELECT 'questions', COUNT(*) FROM questions
+UNION ALL
+SELECT 'answer_options', COUNT(*) FROM answer_options
+UNION ALL
+SELECT 'test_results', COUNT(*) FROM test_results
+UNION ALL
+SELECT 'user_answers', COUNT(*) FROM user_answers;
+
+-- Parādīt pirmos 5 lietotājus
+SELECT id, username, first_name, last_name, role FROM users LIMIT 5;
+
+-- Parādīt testa jautājumus
+SELECT t.title, q.question_text 
+FROM tests t 
+JOIN questions q ON t.id = q.test_id 
+ORDER BY t.id, q.id;
