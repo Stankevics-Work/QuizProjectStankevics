@@ -1,426 +1,360 @@
 package pd1_stankevics_27;
 
 import javax.swing.*;
-import java.awt.*;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.awt.Dimension;
 
 public class Interface extends javax.swing.JFrame {
     
     private static final String DRIVER = "org.apache.derby.jdbc.ClientDriver";
-
     private String URL;
     private String USER;
     private String PASSWORD;
 
-    private Student currentStudent;
+    private User currentUser;
+    private AuthService authService;
+    
+    private Connection connection = null;
     private List<Question> testQuestions = new ArrayList<>();
     private int currentQuestionIndex = 0;
     private int score = 0;
     private int selectedAnswer = -1;
-
-    private Connection connection = null;
     
     public Interface() {
-    initComponents();
-
-    loadConfig();
-
-    StartChoice.setSize(500, 500);
-    StartChoice.setLocationRelativeTo(null);
-    StartChoice.setModal(true);
-    StartChoice.setVisible(true);
-
-    SwingUtilities.invokeLater(() -> {
-        try {
-            initializeDatabaseConnection();
-        } catch (Exception e) {
-            System.err.println("Database init failed, but continuing: " + e.getMessage());
+        initComponents();
+        loadConfig();
+        
+        // SAVIENOJAMIES UZREIZ
+        boolean connected = connectToDatabase();
+        
+        if (!connected) {
+            int choice = JOptionPane.showConfirmDialog(this,
+                "Nevar izveidot savienojumu ar datu bāzi!\n" +
+                "Vai vēlaties turpināt bez datubāzes (tikai testa režīms)?",
+                "Savienojuma kļūda",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+                
+            if (choice != JOptionPane.YES_OPTION) {
+                System.exit(1);
+            }
         }
-    });
-}
-
+        
+        StartChoice.setSize(500, 500);
+        StartChoice.setLocationRelativeTo(null);
+        StartChoice.setModal(true);
+        StartChoice.setVisible(true);
+    }
     
-   private void loadConfig() {
+    private void loadConfig() {
         try {
             Properties p = new Properties();
-
             InputStream in = getClass().getResourceAsStream("/pd1_stankevics_27/config.properties");
-
+            
             if (in == null) {
                 JOptionPane.showMessageDialog(this,
-                    "config.properties NAV ATRASTS!\n" +
-                    "Tam jābūt: src/pd1_stankevics_27/config.properties",
+                    "config.properties NAV ATRASTS!",
                     "Konfigurācijas kļūda",
                     JOptionPane.ERROR_MESSAGE);
                 return;
             }
-
+            
             p.load(in);
-
             URL = p.getProperty("db.url");
             USER = p.getProperty("db.user");
             PASSWORD = p.getProperty("db.password");
-
-            System.out.println("Config loaded:");
-            System.out.println("URL = " + URL);
-            System.out.println("USER = " + USER);
-
+            
+            System.out.println("Config ielādēts:");
+            System.out.println("  URL: " + URL);
+            System.out.println("  USER: " + USER);
+            
         } catch (Exception e) {
             e.printStackTrace();
         }
-   }
+    }
     
-private void initializeDatabaseConnection() {
+    private boolean connectToDatabase() {
+    System.out.println("=== SAVIENOJUMU IZVEIDE ===");
+    System.out.println("URL: " + URL);
+    System.out.println("USER: " + USER);
+    
     try {
-        System.out.println("=== DERBY NETWORK SERVER CONNECTION ===");
-        System.out.println("Driver: " + DRIVER);
-        System.out.println("URL: " + URL);
-        System.out.println("User: " + USER);
+        // 1. Ielādē draiveri
+        Class.forName(DRIVER);
+        System.out.println("✅ Draiveris ielādēts: " + DRIVER);
         
-        // 1. Ielādē Derby ClientDriver (nevis EmbeddedDriver)
-        try {
-            Class.forName(DRIVER);
-            System.out.println("✅ ClientDriver loaded successfully");
-        } catch (ClassNotFoundException e) {
-            System.err.println("❌ Derby ClientDriver not found!");
-            JOptionPane.showMessageDialog(this,
-                "Apache Derby Client draiveris nav atrasts!\n" +
-                "Pievienojiet derbyclient.jar (nevis derby.jar) projekta bibliotēkām.",
-                "Draivera kļūda",
-                JOptionPane.ERROR_MESSAGE);
-            connection = null;
-            return;
-        }
-        
-        // 2. Izveido savienojumu ar lietotājvārdu/paroli
-        System.out.println("⏳ Connecting to Derby Network Server...");
+        // 2. Savienojuma parametri - tikai lietotājs un parole
         Properties props = new Properties();
-        props.put("user", USER);
-        props.put("password", PASSWORD);
-        props.put("create", "true"); // Izveido datubāzi, ja tāda nav
+        props.setProperty("user", USER);
+        props.setProperty("password", PASSWORD);
+        // NOŅEMTS: props.setProperty("create", "true"); - jo lietojam esošu datubāzi
         
+        // 3. Izveido savienojumu ar esošo datubāzi
+        System.out.println("⏳ Mēģinu savienoties ar esošo datubāzi...");
         connection = DriverManager.getConnection(URL, props);
-        System.out.println("✅✅✅ CONNECTED to Derby Network Server!");
+        System.out.println("✅ Savienojums izveidots!");
         
-        // 3. Pārbauda savienojumu
-        try {
-            Statement testStmt = connection.createStatement();
-            ResultSet rs = testStmt.executeQuery("SELECT 1 FROM SYS.SYSTABLES FETCH FIRST 1 ROWS ONLY");
-            System.out.println("✅ Test query executed successfully");
-            rs.close();
-            testStmt.close();
-        } catch (SQLException e) {
-            System.err.println("⚠ Test query failed: " + e.getMessage());
+        // 4. Pārbauda savienojumu
+        if (connection != null && !connection.isClosed()) {
+            System.out.println("✅ Savienojums ir aktīvs");
+            
+            // 5. Izveido AuthService
+            authService = new AuthService(connection);
+            System.out.println("✅ AuthService izveidots");
+            
+            // 6. Pārbauda datubāzes saturu
+            checkUsersTable();
+            checkTests();
+            checkQuestions();
+            
+            return true;
+        } else {
+            System.err.println("❌ Savienojums nav aktīvs!");
+            return false;
         }
         
-        // 4. Izveido tabulas
-        initializeTables();
+    } catch (ClassNotFoundException e) {
+        System.err.println("❌ Draiveris nav atrasts: " + e.getMessage());
+        showError("Derby draiveris nav atrasts!\n" +
+                 "Pievienojiet derbyclient.jar projekta bibliotēkām.");
+        return false;
         
     } catch (SQLException e) {
-        System.err.println("❌ Database connection failed: " + e.getMessage());
-        System.err.println("Error code: " + e.getErrorCode());
-        System.err.println("SQL state: " + e.getSQLState());
+        System.err.println("❌ SQL KĻŪDA:");
+        System.err.println("   State: " + e.getSQLState());
+        System.err.println("   Kods: " + e.getErrorCode());
+        System.err.println("   Ziņojums: " + e.getMessage());
         
-        String errorMessage = "Nevar izveidot savienojumu ar datu bāzi!\n\n";
+        String errorMsg = "Nevar savienoties ar datu bāzi!\n\n";
         
-        // Pārbauda konkrētas kļūdas
-        if (e.getSQLState() != null && e.getSQLState().startsWith("08")) {
-            // Connection error - server not running
-            errorMessage += "Kļūda: Nav savienojuma ar Derby serveri\n\n";
-            errorMessage += "Lai salabotu:\n";
-            errorMessage += "1. Palaidiet Derby Network Server:\n";
-            errorMessage += "   startNetworkServer.bat (Windows) vai\n";
-            errorMessage += "   ./startNetworkServer (Linux/Mac)\n";
-            errorMessage += "2. Pārbaudiet, vai ports 1527 ir brīvs\n";
-            errorMessage += "3. Pārbaudiet, vai serveris darbojas\n\n";
-        } else if (e.getMessage() != null && e.getMessage().contains("Connection refused")) {
-            errorMessage += "Kļūda: Serveris neatbild (connection refused)\n\n";
-            errorMessage += "Pārbaudiet:\n";
-            errorMessage += "1. Vai Derby Network Server ir palaists?\n";
-            errorMessage += "2. Vai ports 1527 nav aizņemts?\n";
-            errorMessage += "3. Vai varat pieslēgties ar ij (Derby tool)?\n";
+        if (e.getSQLState() != null) {
+            switch (e.getSQLState()) {
+                case "08001":
+                case "08S01":
+                    errorMsg += "Nav savienojuma ar Derby serveri!\n" +
+                               "Pārliecinieties, ka Derby serveris darbojas:\n" +
+                               "startNetworkServer.bat";
+                    break;
+                    
+                case "28000":
+                    errorMsg += "Nepareizs lietotājvārds/parole!\n" +
+                               "Lietotājs: " + USER + "\n" +
+                               "Pārbaudiet config.properties failu!";
+                    break;
+                    
+                case "XJ004":
+                    errorMsg += "Datubāze nav atrasta!\n" +
+                               "Meklēju: " + URL + "\n" +
+                               "Pārliecinieties, ka datubāze eksistē šajā ceļā!";
+                    break;
+                    
+                case "XJ040":
+                    errorMsg += "Datubāze jau ir piesaistīta citam savienojumam!";
+                    break;
+                    
+                default:
+                    errorMsg += "Kļūda: " + e.getMessage() + "\n" +
+                               "SQL State: " + e.getSQLState();
+            }
+        } else {
+            errorMsg += "Kļūda: " + e.getMessage();
         }
         
-        errorMessage += "Tehniskā informācija:\n";
-        errorMessage += "Kļūda: " + e.getMessage() + "\n";
-        errorMessage += "SQL State: " + e.getSQLState() + "\n";
-        
-        JOptionPane.showMessageDialog(this,
-            errorMessage,
-            "Savienojuma kļūda",
-            JOptionPane.ERROR_MESSAGE);
-        connection = null;
+        showError(errorMsg);
+        return false;
         
     } catch (Exception e) {
-        System.err.println("❌ Unexpected error: " + e.getMessage());
+        System.err.println("❌ Negaidīta kļūda: " + e.getMessage());
         e.printStackTrace();
-        JOptionPane.showMessageDialog(this,
-            "Negaidīta kļūda:\n" + e.getMessage(),
-            "Sistēmas kļūda",
-            JOptionPane.ERROR_MESSAGE);
-        connection = null;
+        showError("Negaidīta kļūda:\n" + e.getMessage());
+        return false;
     }
 }
-
-private boolean ensureConnection() {
-    // 1. Ja savienojums jau pastāv
-    if (connection != null) {
-        try {
-            if (!connection.isClosed() && connection.isValid(2)) {
-                System.out.println("✅ Connection is active and valid");
-                return true;
-            }
-        } catch (SQLException e) {
-            System.err.println("⚠ Error checking connection: " + e.getMessage());
-        }
-    }
     
-    // 2. Mēģina izveidot jaunu savienojumu
-    System.out.println("🔄 Re-establishing database connection...");
-    
-    try {
-        // Aizver veco savienojumu, ja tas ir atvērts
-        if (connection != null && !connection.isClosed()) {
-            connection.close();
-        }
-    } catch (SQLException e) {
-        // Ignorē aizvēršanas kļūdas
-    }
-    
-    // Izveido jaunu savienojumu
-    initializeDatabaseConnection();
-    
-    return connection != null;
-}
-
-private void initializeTables() {
-    if (connection == null) return;
-    
+    private void checkTests() {
     try {
         Statement stmt = connection.createStatement();
-        
-        // **NEBŪTISKAS IZMAINAS** - tikai pārbauda savienojumu
-        // Mēs NENEDARĪSIM CREATE TABLE, jo tabulas jau eksistē no jūsu skripta
-        
-        System.out.println("=== Checking database structure ===");
-        
-        // Pārbauda, vai ir dati jautājumos
-        ResultSet rs = stmt.executeQuery(
-            "SELECT COUNT(*) as question_count, " +
-            "(SELECT COUNT(*) FROM answer_options) as option_count " +
-            "FROM questions"
-        );
+        ResultSet rs = stmt.executeQuery("SELECT COUNT(*) as count FROM tests");
         
         if (rs.next()) {
-            int questionCount = rs.getInt("question_count");
-            int optionCount = rs.getInt("option_count");
-            System.out.println("ℹ️ Questions in DB: " + questionCount);
-            System.out.println("ℹ️ Answer options in DB: " + optionCount);
+            int count = rs.getInt("count");
+            System.out.println("ℹ️ Testu skaits datubāzē: " + count);
             
-            if (questionCount == 0) {
-                System.out.println("⚠ Database is empty - please run your SQL script!");
+            if (count > 0) {
+                // Parāda testu sarakstu
+                ResultSet tests = stmt.executeQuery("SELECT id, title FROM tests");
+                System.out.println("Pieejamie testi:");
+                while (tests.next()) {
+                    System.out.println("  - ID=" + tests.getInt("id") + ": " + tests.getString("title"));
+                }
+                tests.close();
+            } else {
+                System.out.println("⚠ Nav neviena testa datubāzē!");
             }
         }
-        
         rs.close();
         stmt.close();
-        
     } catch (SQLException e) {
-        System.err.println("Table check error: " + e.getMessage());
-        // Tas var būt normāli, ja tabulas vēl neeksistē
+        System.err.println("Kļūda pārbaudot testus: " + e.getMessage());
     }
 }
+
+/**
+ * Pārbauda vai jautājumu tabulā ir dati
+ */
+private void checkQuestions() {
+    try {
+        Statement stmt = connection.createStatement();
+        ResultSet rs = stmt.executeQuery("SELECT COUNT(*) as count FROM questions");
         
-    private void closeDatabaseConnection() {
-        try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
-                System.out.println("🔒 Savienojums aizvērts");
+        if (rs.next()) {
+            int count = rs.getInt("count");
+            System.out.println("ℹ️ Jautājumu skaits datubāzē: " + count);
+            
+            if (count == 0) {
+                System.out.println("⚠ Nav jautājumu datubāzē!");
+                System.out.println("   Pievienojiet jautājumus caur SQL skriptu");
             }
+        }
+        rs.close();
+        stmt.close();
+    } catch (SQLException e) {
+        System.err.println("Kļūda pārbaudot jautājumus: " + e.getMessage());
+    }
+}
+
+/**
+ * Parāda kļūdas paziņojumu lietotājam
+ */
+private void showError(String message) {
+    JOptionPane.showMessageDialog(this, message, "Kļūda", JOptionPane.ERROR_MESSAGE);
+}
+    
+    private void checkUsersTable() {
+        try {
+            DatabaseMetaData meta = connection.getMetaData();
+            ResultSet rs = meta.getTables(null, null, "USERS", null);
+            
+            if (rs.next()) {
+                System.out.println("✅ Tabula 'users' eksistē");
+                
+                // Parāda dažus lietotājus
+                Statement stmt = connection.createStatement();
+                ResultSet users = stmt.executeQuery("SELECT username, first_name, last_name, role FROM users FETCH FIRST 3 ROWS ONLY");
+                
+                System.out.println("Pirmie 3 lietotāji:");
+                while (users.next()) {
+                    System.out.println("  - " + users.getString("username") + 
+                                      " (" + users.getString("first_name") + " " + 
+                                      users.getString("last_name") + ") - " + 
+                                      users.getString("role"));
+                }
+                users.close();
+                stmt.close();
+            } else {
+                System.out.println("⚠ Tabula 'users' NAV atrasta!");
+            }
+            rs.close();
+            
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("Kļūda pārbaudot tabulu: " + e.getMessage());
         }
     }
-
-private void loadQuestionsFromDatabase() {
+    
+    private void loadQuestionsFromDatabase() {
     testQuestions.clear();
     
-    if (!ensureConnection()) {
-        JOptionPane.showMessageDialog(this, 
-            "Nav savienojuma ar datu bāzi!", 
-            "Kļūda", 
-            JOptionPane.ERROR_MESSAGE);
+    if (connection == null) {
+        System.err.println("Nav savienojuma ar datubāzi!");
         return;
     }
     
     try {
-        // Vienkāršs SQL vaicājums, kas savieno questions un answer_options
-        String query = "SELECT " +
-                      "q.question_text, " +
-                      "MAX(CASE WHEN ao.option_order = 1 THEN ao.option_text END) as option1, " +
-                      "MAX(CASE WHEN ao.option_order = 2 THEN ao.option_text END) as option2, " +
-                      "MAX(CASE WHEN ao.option_order = 3 THEN ao.option_text END) as option3, " +
-                      "MAX(CASE WHEN ao.is_correct = true THEN ao.option_order END) as correct_order " +
-                      "FROM questions q " +
-                      "JOIN answer_options ao ON q.id = ao.question_id " +
-                      "GROUP BY q.id, q.question_text " +
-                      "ORDER BY q.id";
+        String sql = "SELECT q.id, q.question_text, " +
+                     "ao1.option_text as opt1, " +
+                     "ao2.option_text as opt2, " +
+                     "ao3.option_text as opt3, " +
+                     "CASE " +
+                     "  WHEN ao1.is_correct = true THEN 0 " +
+                     "  WHEN ao2.is_correct = true THEN 1 " +
+                     "  WHEN ao3.is_correct = true THEN 2 " +
+                     "  ELSE 0 END as correct_index " +
+                     "FROM questions q " +
+                     "LEFT JOIN answer_options ao1 ON q.id = ao1.question_id AND ao1.option_order = 1 " +
+                     "LEFT JOIN answer_options ao2 ON q.id = ao2.question_id AND ao2.option_order = 2 " +
+                     "LEFT JOIN answer_options ao3 ON q.id = ao3.question_id AND ao3.option_order = 3 " +
+                     "WHERE q.test_id = 1 " +  // Pieņemot, ka tests ar ID=1
+                     "ORDER BY q.id";
         
-        Statement stmt = connection.createStatement();
-        ResultSet rs = stmt.executeQuery(query);
-        
-        int questionCount = 0;
-        while (rs.next()) {
-            String questionText = rs.getString("question_text");
-            String option1 = rs.getString("option1");
-            String option2 = rs.getString("option2");
-            String option3 = rs.getString("option3");
-            int correctOrder = rs.getInt("correct_order"); // 1, 2 vai 3
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
             
-            // Konvertē no 1,2,3 uz 0,1,2 (Java indeksi)
-            int correctIndex = correctOrder - 1;
-            
-            if (questionText != null && option1 != null && option2 != null && option3 != null && correctIndex >= 0) {
-                Question question = new Question(questionText, option1, option2, option3, correctIndex);
-                testQuestions.add(question);
-                questionCount++;
+            int count = 0;
+            while (rs.next()) {
+                String questionText = rs.getString("question_text");
+                String opt1 = rs.getString("opt1");
+                String opt2 = rs.getString("opt2");
+                String opt3 = rs.getString("opt3");
+                int correctIndex = rs.getInt("correct_index");
                 
-                System.out.println("✅ Jautājums " + questionCount + ": " + questionText);
-                System.out.println("   Atbilžu varianti: " + option1 + " | " + option2 + " | " + option3);
-                System.out.println("   Pareizais variants: " + correctIndex);
+                if (questionText != null && opt1 != null && opt2 != null && opt3 != null) {
+                    Question q = new Question(questionText, opt1, opt2, opt3, correctIndex);
+                    testQuestions.add(q);
+                    count++;
+                }
             }
-        }
-        
-        rs.close();
-        stmt.close();
-        
-        System.out.println("=== KOPĀ IELĀDĒTI " + questionCount + " JAUTĀJUMI ===");
-        
-        if (questionCount == 0) {
-            System.out.println("⚠ Nav jautājumu datubāzē");
-            JOptionPane.showMessageDialog(this, 
-                "Datu bāzē nav jautājumu!", 
-                "Kļūda", 
-                JOptionPane.ERROR_MESSAGE);
+            
+            System.out.println("✅ Ielādēti " + count + " jautājumi no datubāzes");
+            
+            if (count == 0) {
+                // Ja nav jautājumu, pievieno pagaidu testa jautājumus
+                addDefaultQuestions();
+            }
         }
         
     } catch (SQLException e) {
         System.err.println("❌ Kļūda ielādējot jautājumus: " + e.getMessage());
         e.printStackTrace();
-        JOptionPane.showMessageDialog(this, 
-            "Kļūda ielādējot jautājumus: " + e.getMessage(), 
-            "Datu bāzes kļūda", 
-            JOptionPane.ERROR_MESSAGE);
+        // Pievieno pagaidu jautājumus kļūdas gadījumā
+        addDefaultQuestions();
     }
 }
 
-private void loadQuestionsAlternative() throws SQLException {
-    System.out.println("⚠ Mēģinu alternatīvo metodi...");
+private void addDefaultQuestions() {
+    System.out.println("⚠ Izmantoju pagaidu testa jautājumus");
+    testQuestions.add(new Question("Kas ir Java?", "Programmēšanas valoda", "Operētājsistēma", "Datu bāze", 0));
+    testQuestions.add(new Question("Kas ir SQL?", "Datu bāzes valoda", "Programmēšanas valoda", "Operētājsistēma", 0));
+    testQuestions.add(new Question("Kas ir OOP?", "Objektorientēta programmēšana", "Funkcionālā programmēšana", "Procedurālā programmēšana", 0));
+}
     
-    // Vienkāršāks vaicājums
-    String query = 
-        "SELECT q.id, q.question_text, " +
-        "ao1.option_text AS opt1, " +
-        "ao2.option_text AS opt2, " +
-        "ao3.option_text AS opt3, " +
-        "CASE " +
-        "  WHEN ao1.is_correct = true THEN 0 " +
-        "  WHEN ao2.is_correct = true THEN 1 " +
-        "  WHEN ao3.is_correct = true THEN 2 " +
-        "  ELSE -1 " +
-        "END AS correct_index " +
-        "FROM questions q " +
-        "LEFT JOIN answer_options ao1 ON q.id = ao1.question_id AND ao1.option_order = 1 " +
-        "LEFT JOIN answer_options ao2 ON q.id = ao2.question_id AND ao2.option_order = 2 " +
-        "LEFT JOIN answer_options ao3 ON q.id = ao3.question_id AND ao3.option_order = 3 " +
-        "WHERE q.test_id = 1 " +
-        "ORDER BY q.id";
-    
-    Statement stmt = connection.createStatement();
-    ResultSet rs = stmt.executeQuery(query);
-    
-    int count = 0;
-    while (rs.next()) {
-        String questionText = rs.getString("question_text");
-        String option1 = rs.getString("opt1");
-        String option2 = rs.getString("opt2");
-        String option3 = rs.getString("opt3");
-        int correctOption = rs.getInt("correct_index");
-        
-        if (option1 != null && option2 != null && option3 != null && correctOption >= 0) {
-            Question question = new Question(questionText, option1, option2, option3, correctOption);
-            testQuestions.add(question);
-            count++;
+    private void closeDatabaseConnection() {
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+                System.out.println("🔒 Savienojums ar datu bāzi aizvērts");
+            }
+        } catch (SQLException e) {
+            System.err.println("Kļūda aizverot savienojumu: " + e.getMessage());
         }
     }
     
-    rs.close();
-    stmt.close();
+    private void closeAllWindows() {
+    System.out.println("Aizveru visus logus...");
     
-    System.out.println("✅ Ielādēti " + count + " jautājumi ar alternatīvo metodi");
-}
-
-private void loadQuestionsSimplified() throws SQLException {
-    System.out.println("⚠ Mēģinu vienkāršāku vaicājumu...");
+    if (StartChoice != null && StartChoice.isVisible()) StartChoice.dispose();
+    if (LoginOrRegister != null && LoginOrRegister.isVisible()) LoginOrRegister.dispose();
+    if (Register != null && Register.isVisible()) Register.dispose();
+    if (StartTest != null && StartTest.isVisible()) StartTest.dispose();
+    if (ChoiceBetweenAnswers != null && ChoiceBetweenAnswers.isVisible()) ChoiceBetweenAnswers.dispose();
+    if (ResultOutput != null && ResultOutput.isVisible()) ResultOutput.dispose();
     
-    // Alternatīvs vaicājums, kas var būt vienkāršāks
-    String query = "SELECT q.question_text, " +
-                  "(SELECT option_text FROM answer_options ao1 WHERE ao1.question_id = q.id AND ao1.option_order = 1) AS opt1, " +
-                  "(SELECT option_text FROM answer_options ao2 WHERE ao2.question_id = q.id AND ao2.option_order = 2) AS opt2, " +
-                  "(SELECT option_text FROM answer_options ao3 WHERE ao3.question_id = q.id AND ao3.option_order = 3) AS opt3, " +
-                  "(SELECT option_order-1 FROM answer_options ao4 WHERE ao4.question_id = q.id AND ao4.is_correct = true FETCH FIRST ROW ONLY) AS correct " +
-                  "FROM questions q " +
-                  "WHERE q.test_id = 1 " +
-                  "ORDER BY q.id " +
-                  "FETCH FIRST 10 ROWS ONLY";
-    
-    Statement stmt = connection.createStatement();
-    ResultSet rs = stmt.executeQuery(query);
-    
-    int count = 0;
-    while (rs.next()) {
-        String questionText = rs.getString("question_text");
-        String option1 = rs.getString("opt1");
-        String option2 = rs.getString("opt2");
-        String option3 = rs.getString("opt3");
-        int correctOption = rs.getInt("correct");
-        
-        if (option1 != null && option2 != null && option3 != null) {
-            Question question = new Question(questionText, option1, option2, option3, correctOption);
-            testQuestions.add(question);
-            count++;
-        }
-    }
-    
-    rs.close();
-    stmt.close();
-    
-    System.out.println("✅ Ielādēti " + count + " jautājumi ar vienkāršotu vaicājumu");
+    dispose();
 }
     
-    private void addDefaultQuestions() {
-    // Netiek izsaukts automātiski vairs
-    System.out.println("⚠ Using default questions as fallback");
-    
-    testQuestions.add(new Question(
-        "Kļūda: Nav jautājumu datubāzē!", 
-        "Lūdzu, ielādējiet datus no SQL skripta",
-        "Palaidiet derby serveri",
-        "Pārbaudiet savienojumu",
-        0
-    ));
-}
-
-    /**
-     * This method is called from within the constructor to initialize the form.
-     * WARNING: Do NOT modify this code. The content of this method is always
-     * regenerated by the Form Editor.
-     */
-    @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
@@ -792,87 +726,60 @@ private void loadQuestionsSimplified() throws SQLException {
     }//GEN-LAST:event_jLoginButtonActionPerformed
 
     private void jRegisterButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jRegisterButton2ActionPerformed
-    String vards = jNameField.getText();
-    String uzvards = jSurnameField.getText();
-    String lietotajvards = jUsernameField2.getText();
-    String parole = jPasswordField2.getText();
-    String parole2 = jRepeatPasswordField3.getText();
-
-    if (vards.isEmpty() || uzvards.isEmpty() || lietotajvards.isEmpty() ||
-            parole.isEmpty() || parole2.isEmpty()) {
-        JOptionPane.showMessageDialog(this, "Lūdzu, aizpildiet visus laukus!");
-        return;
-    }
-
-    if (!parole.equals(parole2)) {
-        JOptionPane.showMessageDialog(this, "Paroles nesakrīt!");
-        return;
-    }
-
-    if (parole.length() < 6) {
-        JOptionPane.showMessageDialog(this, "Parolei jābūt vismaz 6 simboliem!");
-        return;
-    }
-
-    // PIRMS DATUBĀZES VAICĀJUMA, PĀRBAUDIET SAVIENOJUMU
-    if (connection == null) {
-        JOptionPane.showMessageDialog(this, 
-            "Nav savienojuma ar datu bāzi! Lūdzu restartējiet programmu.",
-            "Savienojuma kļūda",
-            JOptionPane.ERROR_MESSAGE);
-        return;
-    }
-
-    try {
-        // Pārbauda, vai lietotājvārds jau eksistē datu bāzē
-        String checkUserSQL = "SELECT COUNT(*) FROM users WHERE username = ?";
-        PreparedStatement checkStmt = connection.prepareStatement(checkUserSQL);
-        checkStmt.setString(1, lietotajvards);
-        ResultSet rs = checkStmt.executeQuery();
-        
-        if (rs.next() && rs.getInt(1) > 0) {
-            JOptionPane.showMessageDialog(this, "Šāds lietotājvārds jau eksistē!");
+    if (authService == null) {
+            JOptionPane.showMessageDialog(this, 
+                "Nav savienojuma ar datu bāzi!", 
+                "Kļūda", 
+                JOptionPane.ERROR_MESSAGE);
             return;
         }
         
-        // Ievieto jaunu lietotāju datu bāzē
-        String insertSQL = "INSERT INTO users (username, password, first_name, last_name, role) VALUES (?, ?, ?, ?, 'STUDENT')";
-        PreparedStatement pstmt = connection.prepareStatement(insertSQL);
-        pstmt.setString(1, lietotajvards);
-        pstmt.setString(2, parole);
-        pstmt.setString(3, vards);
-        pstmt.setString(4, uzvards);
-        
-        int rowsAffected = pstmt.executeUpdate();
-        
-        if (rowsAffected > 0) {
-            JOptionPane.showMessageDialog(this, "Reģistrācija veiksmīga!");
+        String vards = jNameField.getText().trim();
+        String uzvards = jSurnameField.getText().trim();
+        String lietotajvards = jUsernameField2.getText().trim();
+        String parole = jPasswordField2.getText();
+        String parole2 = jRepeatPasswordField3.getText();
+
+        if (vards.isEmpty() || uzvards.isEmpty() || lietotajvards.isEmpty() ||
+                parole.isEmpty() || parole2.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Lūdzu, aizpildiet visus laukus!");
+            return;
+        }
+
+        if (!parole.equals(parole2)) {
+            JOptionPane.showMessageDialog(this, "Paroles nesakrīt!");
+            return;
+        }
+
+        if (parole.length() < 6) {
+            JOptionPane.showMessageDialog(this, "Parolei jābūt vismaz 6 simboliem!");
+            return;
+        }
+
+        try {
+            currentUser = authService.registerStudent(vards, uzvards, lietotajvards, parole);
             
-            // Izveido lokālo Student objektu
-            currentStudent = new Student(vards, lietotajvards, parole);
+            JOptionPane.showMessageDialog(this, 
+                "Reģistrācija veiksmīga!\nSveicināts, " + currentUser.getName() + "!",
+                "Veiksme",
+                JOptionPane.INFORMATION_MESSAGE);
             
-            // Aizver reģistrācijas logu
             Register.dispose();
             
-            // Atver ielogošanās logu
             LoginOrRegister.setModal(true);
             LoginOrRegister.setSize(500, 500);
             LoginOrRegister.setLocationRelativeTo(this);
             LoginOrRegister.setVisible(true);
+            
+        } catch (IllegalArgumentException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Kļūda", JOptionPane.ERROR_MESSAGE);
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, 
+                "Datubāzes kļūda:\n" + e.getMessage(), 
+                "Kļūda", 
+                JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
         }
-        
-        // Aizverat PreparedStatement
-        rs.close();
-        checkStmt.close();
-        pstmt.close();
-        
-    } catch (SQLException e) {
-        JOptionPane.showMessageDialog(this, 
-            "Kļūda reģistrējoties:\n" + e.getMessage(), 
-            "Datu bāzes kļūda", 
-            JOptionPane.ERROR_MESSAGE);
-        e.printStackTrace();
-    }
     }//GEN-LAST:event_jRegisterButton2ActionPerformed
 
     private void jNameFieldActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jNameFieldActionPerformed
@@ -896,8 +803,15 @@ private void loadQuestionsSimplified() throws SQLException {
     }//GEN-LAST:event_jRepeatPasswordField3ActionPerformed
 
     private void jLoginButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jLoginButton1ActionPerformed
-    try {
-        String login = jUsernameField1.getText();
+    if (authService == null) {
+            JOptionPane.showMessageDialog(this, 
+                "Nav savienojuma ar datu bāzi!", 
+                "Kļūda", 
+                JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        String login = jUsernameField1.getText().trim();
         String password = jPasswordField1.getText();
 
         if (login.isEmpty() || password.isEmpty()) {
@@ -905,76 +819,41 @@ private void loadQuestionsSimplified() throws SQLException {
             return;
         }
 
-        // Pārbauda vai ir savienojums ar datubāzi
-        if (!ensureConnection()) {
-            JOptionPane.showMessageDialog(this, 
-                "Nevar izveidot savienojumu ar datu bāzi!\n" +
-                "Lūdzu restartējiet programmu vai pārbaudiet savienojumu.",
-                "Savienojuma kļūda",
-                JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        PreparedStatement pstmt = null;
-        ResultSet rs = null;
-        
         try {
-            // Pārbauda lietotāju datu bāzē
-            String sql = "SELECT first_name, last_name FROM users WHERE username = ? AND password = ?";
-            pstmt = connection.prepareStatement(sql);
-            pstmt.setString(1, login);
-            pstmt.setString(2, password);
+            currentUser = authService.login(login, password);
             
-            rs = pstmt.executeQuery();
+            String userType = "";
+            if (currentUser instanceof Student) userType = "Students";
+            else if (currentUser instanceof Teacher) userType = "Skolotājs";
+            else if (currentUser instanceof Admin) userType = "Administrators";
             
-            if (rs.next()) {
-                // Lietotājs atrasts
-                String firstName = rs.getString("first_name");
-                String lastName = rs.getString("last_name");
-                
-                // Izveido Student objektu lokālajai lietošanai
-                currentStudent = new Student(firstName, login, password);
-                
-                JOptionPane.showMessageDialog(this, 
-                    "Ieeja veiksmīga!\nSveicināti, " + firstName + " " + lastName);
-                
-                // Aizver ielogošanās logu
-                LoginOrRegister.dispose();
-                
-                // Atver testa sākuma logu
+            JOptionPane.showMessageDialog(this, 
+                "Ieeja veiksmīga!\nSveicināts, " + currentUser.getName() + " (" + userType + ")",
+                "Veiksme",
+                JOptionPane.INFORMATION_MESSAGE);
+            
+            LoginOrRegister.dispose();
+            
+            if (currentUser instanceof Student) {
                 StartTest.setSize(500, 500);
                 StartTest.setModal(true);
                 StartTest.setLocationRelativeTo(null);
                 StartTest.setVisible(true);
-                
             } else {
-                JOptionPane.showMessageDialog(this, "Nepareizs lietotājvārds vai parole!");
+                JOptionPane.showMessageDialog(this, 
+                    "Šī lietotāja tipa funkcionalitāte tiks pievienota vēlāk.",
+                    "Informācija",
+                    JOptionPane.INFORMATION_MESSAGE);
             }
             
+        } catch (IllegalArgumentException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Kļūda", JOptionPane.ERROR_MESSAGE);
+        } catch (SecurityException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Kļūda", JOptionPane.ERROR_MESSAGE);
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, 
-                "Kļūda ielogojoties:\n" + e.getMessage() + 
-                "\nSQL State: " + e.getSQLState(), 
-                "Datu bāzes kļūda", 
-                JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Datubāzes kļūda:\n" + e.getMessage(), "Kļūda", JOptionPane.ERROR_MESSAGE);
             e.printStackTrace();
-        } finally {
-            // Vienmēr aizver resursus
-            try {
-                if (rs != null) rs.close();
-                if (pstmt != null) pstmt.close();
-            } catch (SQLException e) {
-                System.err.println("Error closing resources: " + e.getMessage());
-            }
         }
-        
-    } catch (Exception e) {
-        JOptionPane.showMessageDialog(this, 
-            "Negaidīta kļūda:\n" + e.getMessage(), 
-            "Sistēmas kļūda", 
-            JOptionPane.ERROR_MESSAGE);
-        e.printStackTrace();
-    }
     }//GEN-LAST:event_jLoginButton1ActionPerformed
 
     private void jRegisterButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jRegisterButton1ActionPerformed
@@ -994,27 +873,19 @@ private void loadQuestionsSimplified() throws SQLException {
     }//GEN-LAST:event_jPasswordField1ActionPerformed
 
     private void jButtonStartTest2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonStartTest2ActionPerformed
-    // Ielādē jautājumus no datu bāzes
-        loadQuestionsFromDatabase();
+    loadQuestionsFromDatabase();
         
-        // Pārbauda, vai ir jautājumi
         if (testQuestions.isEmpty()) {
-            JOptionPane.showMessageDialog(this, 
-                "Nav jautājumu testam!", 
-                "Kļūda", 
-                JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Nav jautājumu testam!", "Kļūda", JOptionPane.ERROR_MESSAGE);
             return;
         }
         
-        // Resetē testa datus
         currentQuestionIndex = 0;
         score = 0;
         selectedAnswer = -1;
         
-        // Ielādē pirmo jautājumu
         loadQuestion();
         
-        // Aizver sākuma logu un atver jautājumu logu
         StartTest.dispose();
         ChoiceBetweenAnswers.setSize(500, 500);
         ChoiceBetweenAnswers.setModal(true);
@@ -1023,22 +894,16 @@ private void loadQuestionsSimplified() throws SQLException {
     }
     
     private void loadQuestion() {
-        if (currentQuestionIndex >= testQuestions.size()) {
-            return;
-        }
+        if (currentQuestionIndex >= testQuestions.size()) return;
         
         Question q = testQuestions.get(currentQuestionIndex);
-        
-        // Parāda jautājumu
         QuestionName.setText((currentQuestionIndex + 1) + ". " + q.getText());
         
-        // Parāda atbilžu variantus
         String[] opts = q.getOptions();
         jCheckBox1.setText(opts[0]);
         jCheckBox2.setText(opts[1]);
         jCheckBox3.setText(opts[2]);
         
-        // Notīra iepriekšējo izvēli
         selectedAnswer = -1;
         jCheckBox1.setSelected(false);
         jCheckBox2.setSelected(false);
@@ -1057,13 +922,8 @@ private void loadQuestionsSimplified() throws SQLException {
             return;
         }
 
-        // Paņem pašreizējo jautājumu
         Question q = testQuestions.get(currentQuestionIndex);
-
-        // Pārbauda pareizo atbildi
-        if (q.isCorrect(selectedAnswer)) {
-            score++;
-        }
+        if (q.isCorrect(selectedAnswer)) score++;
 
         currentQuestionIndex++;
         selectedAnswer = -1;
@@ -1071,7 +931,6 @@ private void loadQuestionsSimplified() throws SQLException {
         if (currentQuestionIndex < testQuestions.size()) {
             loadQuestion();
         } else {
-            // TESTA BEIGAS
             int total = testQuestions.size();
             int percent = (int) Math.round((score * 100.0) / total);
             int mark = calculateMark(percent);
@@ -1079,10 +938,8 @@ private void loadQuestionsSimplified() throws SQLException {
             jTextFieldProcents.setText(percent + "%");
             jTextFieldMark.setText(String.valueOf(mark));
 
-            // Saglabā rezultātus datu bāzē
             saveTestResultsToDatabase();
             
-            // Parāda rezultātus
             ChoiceBetweenAnswers.dispose();
             ResultOutput.setSize(400, 300);
             ResultOutput.setModal(true);
@@ -1104,68 +961,49 @@ private void loadQuestionsSimplified() throws SQLException {
         return 1;
     }
     
-     private void saveTestResultsToDatabase() {
-        if (currentStudent == null || connection == null) {
-            return;
-        }
+    private void saveTestResultsToDatabase() {
+        if (currentUser == null || connection == null || !(currentUser instanceof Student)) return;
         
         try {
-            // Atrod lietotāja ID
             String findUserSQL = "SELECT id FROM users WHERE username = ?";
             PreparedStatement findUserStmt = connection.prepareStatement(findUserSQL);
-            findUserStmt.setString(1, currentStudent.getLogin());
+            findUserStmt.setString(1, currentUser.getLogin());
             ResultSet userRs = findUserStmt.executeQuery();
             
             int userId = -1;
-            if (userRs.next()) {
-                userId = userRs.getInt("id");
-            }
+            if (userRs.next()) userId = userRs.getInt("id");
             userRs.close();
             findUserStmt.close();
             
-            if (userId == -1) {
-                System.out.println("⚠ Lietotājs nav atrasts datu bāzē!");
-                return;
-            }
+            if (userId == -1) return;
             
-            // Aprēķina rezultātus
             int totalQuestions = testQuestions.size();
             int percent = (int) Math.round((score * 100.0) / totalQuestions);
-            int mark = calculateMark(percent);
             
-            // Ievieto rezultātu datu bāzē (pieņemot, ka ir test_results tabula)
-            String insertResultSQL = "INSERT INTO test_results (user_id, test_id, score, max_score, percentage, grade) " +
-                                    "VALUES (?, 1, ?, ?, ?, ?)";
-            
+            String insertResultSQL = "INSERT INTO test_results (user_id, test_id, score, max_score, percentage) VALUES (?, 1, ?, ?, ?)";
             PreparedStatement pstmt = connection.prepareStatement(insertResultSQL);
             pstmt.setInt(1, userId);
             pstmt.setInt(2, score);
             pstmt.setInt(3, totalQuestions);
             pstmt.setDouble(4, percent);
-            pstmt.setString(5, String.valueOf(mark));
-            
-            int rowsAffected = pstmt.executeUpdate();
-            
-            if (rowsAffected > 0) {
-                System.out.println("✅ Testa rezultāts saglabāts datu bāzē");
-            }
-            
+            pstmt.executeUpdate();
             pstmt.close();
+            
+            System.out.println("✅ Testa rezultāts saglabāts");
             
         } catch (SQLException e) {
             System.err.println("Kļūda saglabājot rezultātus: " + e.getMessage());
-            // Neizmet kļūdu lietotājam, jo tas nav kritisks
         }
     }
     
     private void jButtonEndActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonEndActionPerformed
     closeDatabaseConnection();
-   System.exit(0);
+    closeAllWindows();  // <-- PIEVIENOT ŠO RINDU
+    System.exit(0);     // <-- ŠAI JĀBŪT PĒDĒJAI
 }
 
-// Pārraksti loga aizvēršanas metodi
-@Override
-public void dispose() {
+    @Override
+    public void dispose() {
     closeDatabaseConnection();
     super.dispose();
     }//GEN-LAST:event_jButtonEndActionPerformed
@@ -1201,25 +1039,25 @@ private void initializeResultDialog() {
 }
 
 private void showAllResults() {
-    if (currentStudent == null || connection == null) {
+    if (currentUser == null || connection == null) {
         JOptionPane.showMessageDialog(this, "Nav pieslēgts lietotājs!");
         return;
     }
     
     try {
-        String sql = "SELECT tr.score, tr.max_score, tr.percentage, tr.grade, tr.completed_at, t.title " +
+        String sql = "SELECT tr.score, tr.max_score, tr.percentage, tr.completed_at, t.title " +
                      "FROM test_results tr " +
                      "JOIN tests t ON tr.test_id = t.id " +
                      "JOIN users u ON tr.user_id = u.id " +
-                     "WHERE u.username = ? " +
+                     "WHERE u.login = ? " +
                      "ORDER BY tr.completed_at DESC";
         
         PreparedStatement pstmt = connection.prepareStatement(sql);
-        pstmt.setString(1, currentStudent.getLogin());
+        pstmt.setString(1, currentUser.getLogin());
         ResultSet rs = pstmt.executeQuery();
         
         StringBuilder results = new StringBuilder();
-        results.append("=== JŪSU TESTA REZULTĀTI ===\n\n");
+        results.append("=== ").append(currentUser.getName()).append(" TESTA REZULTĀTI ===\n\n");
         
         int count = 0;
         while (rs.next()) {
@@ -1228,13 +1066,11 @@ private void showAllResults() {
             int score = rs.getInt("score");
             int maxScore = rs.getInt("max_score");
             double percentage = rs.getDouble("percentage");
-            String grade = rs.getString("grade");
             Timestamp completedAt = rs.getTimestamp("completed_at");
             
             results.append(count).append(". ").append(title).append("\n");
             results.append("   Rezultāts: ").append(score).append("/").append(maxScore)
                    .append(" (").append(percentage).append("%)\n");
-            results.append("   Atzīme: ").append(grade).append("\n");
             results.append("   Datums: ").append(completedAt).append("\n\n");
         }
         
@@ -1245,7 +1081,6 @@ private void showAllResults() {
             results.append("Jums vēl nav pildīti testi.");
         }
         
-        // Rāda rezultātus dialoglodziņā
         JTextArea textArea = new JTextArea(results.toString());
         textArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(textArea);
@@ -1260,6 +1095,13 @@ private void showAllResults() {
             JOptionPane.ERROR_MESSAGE);
         e.printStackTrace();
     }
+}
+
+private Student getCurrentStudent() {
+    if (currentUser instanceof Student) {
+        return (Student) currentUser;
+    }
+    return null;
 }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables

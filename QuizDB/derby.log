@@ -1,7 +1,7 @@
-Mon Feb 16 10:04:45 EET 2026 : Apache Derby Network Server - 10.11.1.2 - (1629631) started and ready to accept connections on port 1527
+Mon Feb 23 08:56:59 EET 2026 : Apache Derby Network Server - 10.11.1.2 - (1629631) started and ready to accept connections on port 1527
 ----------------------------------------------------------------
-Mon Feb 16 10:04:45 EET 2026:
-Booting Derby version The Apache Software Foundation - Apache Derby - 10.11.1.2 - (1629631): instance a816c00e-019c-657a-fda9-fffffe614dd3 
+Mon Feb 23 08:56:59 EET 2026:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.11.1.2 - (1629631): instance a816c00e-019c-8949-751b-fffffe614dd3 
 on database directory C:\Users\User.B-23-103-24\Downloads\PD1_Stankevics_27\QuizDB\QuizDB with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@2a139a55 
 Loaded from file:/C:/Program%20Files/Java/jdk1.8.0_111/db/lib/derby.jar
 java.vendor=Oracle Corporation
@@ -13,8 +13,8 @@ os.version=10.0
 derby.system.home=C:\Users\User.B-23-103-24\Downloads\PD1_Stankevics_27\QuizDB
 Database Class Loader started - derby.database.classpath=''
 ----------------------------------------------------------------
-Mon Feb 16 10:05:22 EET 2026: Shutting down Derby engine
+Mon Feb 23 10:27:20 EET 2026: Shutting down Derby engine
 ----------------------------------------------------------------
-Mon Feb 16 10:05:22 EET 2026:
-Shutting down instance a816c00e-019c-657a-fda9-fffffe614dd3 on database directory C:\Users\User.B-23-103-24\Downloads\PD1_Stankevics_27\QuizDB\QuizDB with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@2a139a55 
+Mon Feb 23 10:27:20 EET 2026:
+Shutting down instance a816c00e-019c-8949-751b-fffffe614dd3 on database directory C:\Users\User.B-23-103-24\Downloads\PD1_Stankevics_27\QuizDB\QuizDB with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@2a139a55 
 ----------------------------------------------------------------
