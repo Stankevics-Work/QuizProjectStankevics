@@ -1,5 +1,6 @@
 package pd1_stankevics_27;
 
+import java.time.LocalDateTime; 
 import javax.swing.*;
 import java.sql.*;
 import java.util.Properties;
@@ -8,8 +9,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.awt.Dimension;
 
+/**
+ * Konstruktors, kas inicializē lietotāja saskarni.
+ * Ielādē konfigurācijas datus, izveido savienojumu ar datubāzi un
+ * atver sākotnējo izvēles logu.
+ */
 public class Interface extends javax.swing.JFrame {
     
+        /**
+ * Konstruktors, kas inicializē lietotāja saskarni.
+ * Ielādē konfigurācijas datus, izveido savienojumu ar datubāzi un
+ * atver sākotnējo izvēles logu.
+ */
     private static final String DRIVER = "org.apache.derby.jdbc.ClientDriver";
     private String URL;
     private String USER;
@@ -19,7 +30,7 @@ public class Interface extends javax.swing.JFrame {
     private AuthService authService;
     
     private Connection connection = null;
-    private List<Question> testQuestions = new ArrayList<>();
+    private Test currentTest;
     private int currentQuestionIndex = 0;
     private int score = 0;
     private int selectedAnswer = -1;
@@ -28,7 +39,6 @@ public class Interface extends javax.swing.JFrame {
         initComponents();
         loadConfig();
         
-        // SAVIENOJAMIES UZREIZ
         boolean connected = connectToDatabase();
         
         if (!connected) {
@@ -50,6 +60,10 @@ public class Interface extends javax.swing.JFrame {
         StartChoice.setVisible(true);
     }
     
+    /**
+ * Ielādē konfigurācijas parametrus no config.properties faila.
+ * Nolasa datubāzes URL, lietotājvārdu un paroli.
+ */
     private void loadConfig() {
         try {
             Properties p = new Properties();
@@ -77,36 +91,34 @@ public class Interface extends javax.swing.JFrame {
         }
     }
     
+    /**
+ * Izveido savienojumu ar Derby datubāzi.
+ * 
+ * @return true ja savienojums veiksmīgi izveidots, false pretējā gadījumā
+ */
     private boolean connectToDatabase() {
     System.out.println("=== SAVIENOJUMU IZVEIDE ===");
     System.out.println("URL: " + URL);
     System.out.println("USER: " + USER);
     
     try {
-        // 1. Ielādē draiveri
         Class.forName(DRIVER);
         System.out.println("✅ Draiveris ielādēts: " + DRIVER);
         
-        // 2. Savienojuma parametri - tikai lietotājs un parole
         Properties props = new Properties();
         props.setProperty("user", USER);
         props.setProperty("password", PASSWORD);
-        // NOŅEMTS: props.setProperty("create", "true"); - jo lietojam esošu datubāzi
         
-        // 3. Izveido savienojumu ar esošo datubāzi
         System.out.println("⏳ Mēģinu savienoties ar esošo datubāzi...");
         connection = DriverManager.getConnection(URL, props);
         System.out.println("✅ Savienojums izveidots!");
         
-        // 4. Pārbauda savienojumu
         if (connection != null && !connection.isClosed()) {
             System.out.println("✅ Savienojums ir aktīvs");
             
-            // 5. Izveido AuthService
             authService = new AuthService(connection);
             System.out.println("✅ AuthService izveidots");
             
-            // 6. Pārbauda datubāzes saturu
             checkUsersTable();
             checkTests();
             checkQuestions();
@@ -118,13 +130,13 @@ public class Interface extends javax.swing.JFrame {
         }
         
     } catch (ClassNotFoundException e) {
-        System.err.println("❌ Draiveris nav atrasts: " + e.getMessage());
+        System.err.println("Draiveris nav atrasts: " + e.getMessage());
         showError("Derby draiveris nav atrasts!\n" +
                  "Pievienojiet derbyclient.jar projekta bibliotēkām.");
         return false;
         
     } catch (SQLException e) {
-        System.err.println("❌ SQL KĻŪDA:");
+        System.err.println("SQL KĻŪDA:");
         System.err.println("   State: " + e.getSQLState());
         System.err.println("   Kods: " + e.getErrorCode());
         System.err.println("   Ziņojums: " + e.getMessage());
@@ -174,7 +186,9 @@ public class Interface extends javax.swing.JFrame {
         return false;
     }
 }
-    
+    /**
+ * Pārbauda vai testu tabulā ir dati un izvada testu sarakstu konsolē.
+ */
     private void checkTests() {
     try {
         Statement stmt = connection.createStatement();
@@ -185,7 +199,6 @@ public class Interface extends javax.swing.JFrame {
             System.out.println("ℹ️ Testu skaits datubāzē: " + count);
             
             if (count > 0) {
-                // Parāda testu sarakstu
                 ResultSet tests = stmt.executeQuery("SELECT id, title FROM tests");
                 System.out.println("Pieejamie testi:");
                 while (tests.next()) {
@@ -204,7 +217,7 @@ public class Interface extends javax.swing.JFrame {
 }
 
 /**
- * Pārbauda vai jautājumu tabulā ir dati
+ * Pārbauda vai jautājumu tabulā ir dati.
  */
 private void checkQuestions() {
     try {
@@ -228,12 +241,16 @@ private void checkQuestions() {
 }
 
 /**
- * Parāda kļūdas paziņojumu lietotājam
+ * Parāda kļūdas paziņojumu lietotājam.
+ * 
+ * @param message kļūdas paziņojuma teksts
  */
 private void showError(String message) {
     JOptionPane.showMessageDialog(this, message, "Kļūda", JOptionPane.ERROR_MESSAGE);
 }
-    
+    /**
+ * Pārbauda vai lietotāju tabula eksistē un izvada pirmos 3 lietotājus.
+ */
     private void checkUsersTable() {
         try {
             DatabaseMetaData meta = connection.getMetaData();
@@ -242,7 +259,6 @@ private void showError(String message) {
             if (rs.next()) {
                 System.out.println("✅ Tabula 'users' eksistē");
                 
-                // Parāda dažus lietotājus
                 Statement stmt = connection.createStatement();
                 ResultSet users = stmt.executeQuery("SELECT username, first_name, last_name, role FROM users FETCH FIRST 3 ROWS ONLY");
                 
@@ -265,83 +281,23 @@ private void showError(String message) {
         }
     }
     
-    private void loadQuestionsFromDatabase() {
-    testQuestions.clear();
-    
-    if (connection == null) {
-        System.err.println("Nav savienojuma ar datubāzi!");
-        return;
-    }
-    
+    /**
+ * Aizver savienojumu ar datubāzi.
+ */
+private void closeDatabaseConnection() {
     try {
-        String sql = "SELECT q.id, q.question_text, " +
-                     "ao1.option_text as opt1, " +
-                     "ao2.option_text as opt2, " +
-                     "ao3.option_text as opt3, " +
-                     "CASE " +
-                     "  WHEN ao1.is_correct = true THEN 0 " +
-                     "  WHEN ao2.is_correct = true THEN 1 " +
-                     "  WHEN ao3.is_correct = true THEN 2 " +
-                     "  ELSE 0 END as correct_index " +
-                     "FROM questions q " +
-                     "LEFT JOIN answer_options ao1 ON q.id = ao1.question_id AND ao1.option_order = 1 " +
-                     "LEFT JOIN answer_options ao2 ON q.id = ao2.question_id AND ao2.option_order = 2 " +
-                     "LEFT JOIN answer_options ao3 ON q.id = ao3.question_id AND ao3.option_order = 3 " +
-                     "WHERE q.test_id = 1 " +  // Pieņemot, ka tests ar ID=1
-                     "ORDER BY q.id";
-        
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
-            int count = 0;
-            while (rs.next()) {
-                String questionText = rs.getString("question_text");
-                String opt1 = rs.getString("opt1");
-                String opt2 = rs.getString("opt2");
-                String opt3 = rs.getString("opt3");
-                int correctIndex = rs.getInt("correct_index");
-                
-                if (questionText != null && opt1 != null && opt2 != null && opt3 != null) {
-                    Question q = new Question(questionText, opt1, opt2, opt3, correctIndex);
-                    testQuestions.add(q);
-                    count++;
-                }
-            }
-            
-            System.out.println("✅ Ielādēti " + count + " jautājumi no datubāzes");
-            
-            if (count == 0) {
-                // Ja nav jautājumu, pievieno pagaidu testa jautājumus
-                addDefaultQuestions();
-            }
+        if (connection != null && !connection.isClosed()) {
+            connection.close();
+            System.out.println("🔒 Savienojums ar datu bāzi aizvērts");
         }
-        
     } catch (SQLException e) {
-        System.err.println("❌ Kļūda ielādējot jautājumus: " + e.getMessage());
-        e.printStackTrace();
-        // Pievieno pagaidu jautājumus kļūdas gadījumā
-        addDefaultQuestions();
+        System.err.println("Kļūda aizverot savienojumu: " + e.getMessage());
     }
 }
-
-private void addDefaultQuestions() {
-    System.out.println("⚠ Izmantoju pagaidu testa jautājumus");
-    testQuestions.add(new Question("Kas ir Java?", "Programmēšanas valoda", "Operētājsistēma", "Datu bāze", 0));
-    testQuestions.add(new Question("Kas ir SQL?", "Datu bāzes valoda", "Programmēšanas valoda", "Operētājsistēma", 0));
-    testQuestions.add(new Question("Kas ir OOP?", "Objektorientēta programmēšana", "Funkcionālā programmēšana", "Procedurālā programmēšana", 0));
-}
     
-    private void closeDatabaseConnection() {
-        try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
-                System.out.println("🔒 Savienojums ar datu bāzi aizvērts");
-            }
-        } catch (SQLException e) {
-            System.err.println("Kļūda aizverot savienojumu: " + e.getMessage());
-        }
-    }
-    
+    /**
+ * Aizver visus atvērtos dialoga logus un atbrīvo resursus.
+ */
     private void closeAllWindows() {
     System.out.println("Aizveru visus logus...");
     
@@ -709,6 +665,11 @@ private void addDefaultQuestions() {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
+    /**
+ * Atver reģistrācijas logu un aizver sākotnējo izvēles logu.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jRegisterButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jRegisterButtonActionPerformed
     StartChoice.dispose();
         Register.setSize(500, 500);
@@ -717,6 +678,11 @@ private void addDefaultQuestions() {
         Register.setVisible(true);
     }//GEN-LAST:event_jRegisterButtonActionPerformed
 
+    /**
+ * Atver autorizācijas logu un aizver sākotnējo izvēles logu.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jLoginButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jLoginButtonActionPerformed
     StartChoice.dispose();
         LoginOrRegister.setSize(500, 500);
@@ -725,6 +691,12 @@ private void addDefaultQuestions() {
         LoginOrRegister.setVisible(true);
     }//GEN-LAST:event_jLoginButtonActionPerformed
 
+    /**
+ * Apstrādā lietotāja reģistrācijas pieprasījumu.
+ * Pārbauda ievadītos datus un izveido jaunu studenta kontu.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jRegisterButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jRegisterButton2ActionPerformed
     if (authService == null) {
             JOptionPane.showMessageDialog(this, 
@@ -782,26 +754,57 @@ private void addDefaultQuestions() {
         }
     }//GEN-LAST:event_jRegisterButton2ActionPerformed
 
+    /**
+ * Pārvieto fokusu uz uzvārda lauku.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jNameFieldActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jNameFieldActionPerformed
     jSurnameField.requestFocus();
     }//GEN-LAST:event_jNameFieldActionPerformed
 
+    /**
+ * Pārvieto fokusu uz lietotājvārda lauku.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jSurnameFieldActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jSurnameFieldActionPerformed
     jUsernameField2.requestFocus();
     }//GEN-LAST:event_jSurnameFieldActionPerformed
 
+    /**
+ * Pārvieto fokusu uz paroles lauku.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jUsernameField2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jUsernameField2ActionPerformed
     jPasswordField2.requestFocus();
     }//GEN-LAST:event_jUsernameField2ActionPerformed
 
+    /**
+ * Pārvieto fokusu uz paroles atkārtošanas lauku.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jPasswordField22ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jPasswordField22ActionPerformed
     jRepeatPasswordField3.requestFocus();
     }//GEN-LAST:event_jPasswordField22ActionPerformed
 
+    /**
+ * Aktivizē reģistrācijas procesu, kad nospiests Enter paroles atkārtošanas laukā.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jRepeatPasswordField3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jRepeatPasswordField3ActionPerformed
     jRegisterButton2ActionPerformed(evt);
     }//GEN-LAST:event_jRepeatPasswordField3ActionPerformed
 
+    /**
+ * Apstrādā lietotāja autorizācijas pieprasījumu.
+ * Pārbauda ievadītos datus un veic autentifikāciju.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jLoginButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jLoginButton1ActionPerformed
     if (authService == null) {
             JOptionPane.showMessageDialog(this, 
@@ -856,6 +859,11 @@ private void addDefaultQuestions() {
         }
     }//GEN-LAST:event_jLoginButton1ActionPerformed
 
+    /**
+ * Atver reģistrācijas logu no autorizācijas loga.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jRegisterButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jRegisterButton1ActionPerformed
     LoginOrRegister.dispose();
     Register.setModal(true);
@@ -864,245 +872,185 @@ private void addDefaultQuestions() {
     Register.setVisible(true);
     }//GEN-LAST:event_jRegisterButton1ActionPerformed
 
+    /**
+ * Pārvieto fokusu uz paroles lauku.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jUsernameField1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jUsernameField1ActionPerformed
         jPasswordField1.requestFocus();
     }//GEN-LAST:event_jUsernameField1ActionPerformed
 
+    /**
+ * Aktivizē autorizācijas procesu, kad nospiests Enter paroles laukā.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jPasswordField1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jPasswordField1ActionPerformed
         jLoginButton1ActionPerformed(evt);
     }//GEN-LAST:event_jPasswordField1ActionPerformed
 
+    /**
+ * Sāk testa izpildi - ielādē jautājumus un atver atbilžu logu.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jButtonStartTest2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonStartTest2ActionPerformed
-    loadQuestionsFromDatabase();
-        
-        if (testQuestions.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Nav jautājumu testam!", "Kļūda", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-        
-        currentQuestionIndex = 0;
-        score = 0;
-        selectedAnswer = -1;
-        
-        loadQuestion();
-        
-        StartTest.dispose();
-        ChoiceBetweenAnswers.setSize(500, 500);
-        ChoiceBetweenAnswers.setModal(true);
-        ChoiceBetweenAnswers.setLocationRelativeTo(null);
-        ChoiceBetweenAnswers.setVisible(true);
+    currentTest = new Test("1", "Tests „Nosaukums”", "Vispārīgi", null, java.time.LocalDateTime.now());
+    
+    boolean loaded = currentTest.loadQuestionsFromDatabase(connection, 1);
+    
+    if (!loaded || currentTest.getQuestions().isEmpty()) {
+        JOptionPane.showMessageDialog(this, "Nav jautājumu testam!", "Kļūda", JOptionPane.ERROR_MESSAGE);
+        return;
     }
     
+    currentQuestionIndex = 0;
+    score = 0;
+    selectedAnswer = -1;
+    
+    loadQuestion();
+    
+    StartTest.dispose();
+    ChoiceBetweenAnswers.setSize(500, 500);
+    ChoiceBetweenAnswers.setModal(true);
+    ChoiceBetweenAnswers.setLocationRelativeTo(null);
+    ChoiceBetweenAnswers.setVisible(true);
+    }
+    
+    /**
+ * Ielādē un attēlo nākamo jautājumu testā.
+ */
     private void loadQuestion() {
-        if (currentQuestionIndex >= testQuestions.size()) return;
-        
-        Question q = testQuestions.get(currentQuestionIndex);
-        QuestionName.setText((currentQuestionIndex + 1) + ". " + q.getText());
-        
-        String[] opts = q.getOptions();
-        jCheckBox1.setText(opts[0]);
-        jCheckBox2.setText(opts[1]);
-        jCheckBox3.setText(opts[2]);
-        
-        selectedAnswer = -1;
-        jCheckBox1.setSelected(false);
-        jCheckBox2.setSelected(false);
-        jCheckBox3.setSelected(false);
+    if (currentQuestionIndex >= currentTest.getQuestions().size()) return;  // <-- JAUNais
+    
+    Question q = currentTest.getQuestions().get(currentQuestionIndex);  // <-- JAUNais
+    QuestionName.setText(q.getDisplayText(currentQuestionIndex + 1));  // <-- IZMANTO getDisplayText
+    
+    String[] opts = q.getOptions();
+    jCheckBox1.setText(opts[0]);
+    jCheckBox2.setText(opts[1]);
+    jCheckBox3.setText(opts[2]);
+    
+    selectedAnswer = -1;
+    jCheckBox1.setSelected(false);
+    jCheckBox2.setSelected(false);
+    jCheckBox3.setSelected(false);
     }//GEN-LAST:event_jButtonStartTest2ActionPerformed
 
+    /**
+ * Apstrādā pirmās atbildes izvēli.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jCheckBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox1ActionPerformed
     selectedAnswer = 0;
     jCheckBox2.setSelected(false);
     jCheckBox3.setSelected(false);
     }//GEN-LAST:event_jCheckBox1ActionPerformed
 
+    /**
+ * Apstrādā pāreju uz nākamo jautājumu vai testa beigšanu.
+ * Saglabā atbildi un aprēķina rezultātu testa beigās.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jButtonNextQuestionActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonNextQuestionActionPerformed
     if (selectedAnswer == -1) {
-            JOptionPane.showMessageDialog(this, "Lūdzu, izvēlieties atbildi!");
-            return;
+        JOptionPane.showMessageDialog(this, "Lūdzu, izvēlieties atbildi!");
+        return;
+    }
+
+    Question q = currentTest.getQuestions().get(currentQuestionIndex);
+    if (q.isCorrect(selectedAnswer)) score++;
+
+    currentQuestionIndex++;
+    selectedAnswer = -1;
+
+    if (currentQuestionIndex < currentTest.getQuestions().size()) {
+        loadQuestion();
+    } else {
+        int total = currentTest.getQuestions().size();
+        int percent = (int) Math.round((score * 100.0) / total);
+        int mark = currentTest.calculateMark(percent);  // <-- IZMANTO TEST KLASI
+
+        jTextFieldProcents.setText(percent + "%");
+        jTextFieldMark.setText(String.valueOf(mark));
+
+        // IZMANTO STUDENT KLASI REZULTĀTU SAGLABĀŠANAI
+        if (currentUser instanceof Student) {
+            Student student = (Student) currentUser;
+            student.saveTestResult(connection, score, total, currentTest);
         }
-
-        Question q = testQuestions.get(currentQuestionIndex);
-        if (q.isCorrect(selectedAnswer)) score++;
-
-        currentQuestionIndex++;
-        selectedAnswer = -1;
-
-        if (currentQuestionIndex < testQuestions.size()) {
-            loadQuestion();
-        } else {
-            int total = testQuestions.size();
-            int percent = (int) Math.round((score * 100.0) / total);
-            int mark = calculateMark(percent);
-
-            jTextFieldProcents.setText(percent + "%");
-            jTextFieldMark.setText(String.valueOf(mark));
-
-            saveTestResultsToDatabase();
-            
-            ChoiceBetweenAnswers.dispose();
-            ResultOutput.setSize(400, 300);
-            ResultOutput.setModal(true);
-            ResultOutput.setLocationRelativeTo(null);
-            ResultOutput.setVisible(true);
-        }
+        
+        ChoiceBetweenAnswers.dispose();
+        ResultOutput.setSize(400, 300);
+        ResultOutput.setModal(true);
+        ResultOutput.setLocationRelativeTo(null);
+        ResultOutput.setVisible(true);
+    }
     }//GEN-LAST:event_jButtonNextQuestionActionPerformed
 
-    private int calculateMark(int percent) {
-        if (percent >= 97) return 10;
-        if (percent >= 92) return 9;
-        if (percent >= 84) return 8;
-        if (percent >= 76) return 7;
-        if (percent >= 68) return 6;
-        if (percent >= 60) return 5;
-        if (percent >= 45) return 4;
-        if (percent >= 30) return 3;
-        if (percent >= 15) return 2;
-        return 1;
-    }
-    
-    private void saveTestResultsToDatabase() {
-        if (currentUser == null || connection == null || !(currentUser instanceof Student)) return;
-        
-        try {
-            String findUserSQL = "SELECT id FROM users WHERE username = ?";
-            PreparedStatement findUserStmt = connection.prepareStatement(findUserSQL);
-            findUserStmt.setString(1, currentUser.getLogin());
-            ResultSet userRs = findUserStmt.executeQuery();
-            
-            int userId = -1;
-            if (userRs.next()) userId = userRs.getInt("id");
-            userRs.close();
-            findUserStmt.close();
-            
-            if (userId == -1) return;
-            
-            int totalQuestions = testQuestions.size();
-            int percent = (int) Math.round((score * 100.0) / totalQuestions);
-            
-            String insertResultSQL = "INSERT INTO test_results (user_id, test_id, score, max_score, percentage) VALUES (?, 1, ?, ?, ?)";
-            PreparedStatement pstmt = connection.prepareStatement(insertResultSQL);
-            pstmt.setInt(1, userId);
-            pstmt.setInt(2, score);
-            pstmt.setInt(3, totalQuestions);
-            pstmt.setDouble(4, percent);
-            pstmt.executeUpdate();
-            pstmt.close();
-            
-            System.out.println("✅ Testa rezultāts saglabāts");
-            
-        } catch (SQLException e) {
-            System.err.println("Kļūda saglabājot rezultātus: " + e.getMessage());
-        }
-    }
-    
+    /**
+ * Apstrādā testa beigšanu - aizver savienojumu un visus logus.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jButtonEndActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonEndActionPerformed
     closeDatabaseConnection();
-    closeAllWindows();  // <-- PIEVIENOT ŠO RINDU
-    System.exit(0);     // <-- ŠAI JĀBŪT PĒDĒJAI
+    closeAllWindows(); 
+    System.exit(0);
 }
-
+    
+    /**
+ * Pārdefinēta dispose metode, kas aizver datubāzes savienojumu.
+ */
     @Override
     public void dispose() {
     closeDatabaseConnection();
     super.dispose();
     }//GEN-LAST:event_jButtonEndActionPerformed
 
+    /**
+ * Apstrādā otrās atbildes izvēli.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jCheckBox2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox2ActionPerformed
     selectedAnswer = 1;
     jCheckBox1.setSelected(false);
     jCheckBox3.setSelected(false);
     }//GEN-LAST:event_jCheckBox2ActionPerformed
 
+    /**
+ * Apstrādā trešās atbildes izvēli.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jCheckBox3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox3ActionPerformed
     selectedAnswer = 2;
     jCheckBox1.setSelected(false);
     jCheckBox2.setSelected(false);
     }//GEN-LAST:event_jCheckBox3ActionPerformed
 
+    /**
+ * Tukšs notikumu apstrādātājs procentu teksta laukam.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jTextFieldProcentsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextFieldProcentsActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_jTextFieldProcentsActionPerformed
 
+    /**
+ * Tukšs notikumu apstrādātājs atzīmes teksta laukam.
+ * 
+ * @param evt notikuma objekts
+ */
     private void jTextFieldMarkActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextFieldMarkActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_jTextFieldMarkActionPerformed
 
-    // Pievieno jaunu pogu ResultOutput dialogā
-private void initializeResultDialog() {
-    // Pievieno pogu "Skatīt visus rezultātus"
-    JButton viewAllResultsButton = new JButton("Skatīt visus rezultātus");
-    viewAllResultsButton.addActionListener(e -> showAllResults());
-    
-    // Pievieno pogu rezultātu dialoga paneļam
-    // (Pievieno šo kodu ResultOutput paneļa inicializācijā)
-}
-
-private void showAllResults() {
-    if (currentUser == null || connection == null) {
-        JOptionPane.showMessageDialog(this, "Nav pieslēgts lietotājs!");
-        return;
-    }
-    
-    try {
-        String sql = "SELECT tr.score, tr.max_score, tr.percentage, tr.completed_at, t.title " +
-                     "FROM test_results tr " +
-                     "JOIN tests t ON tr.test_id = t.id " +
-                     "JOIN users u ON tr.user_id = u.id " +
-                     "WHERE u.login = ? " +
-                     "ORDER BY tr.completed_at DESC";
-        
-        PreparedStatement pstmt = connection.prepareStatement(sql);
-        pstmt.setString(1, currentUser.getLogin());
-        ResultSet rs = pstmt.executeQuery();
-        
-        StringBuilder results = new StringBuilder();
-        results.append("=== ").append(currentUser.getName()).append(" TESTA REZULTĀTI ===\n\n");
-        
-        int count = 0;
-        while (rs.next()) {
-            count++;
-            String title = rs.getString("title");
-            int score = rs.getInt("score");
-            int maxScore = rs.getInt("max_score");
-            double percentage = rs.getDouble("percentage");
-            Timestamp completedAt = rs.getTimestamp("completed_at");
-            
-            results.append(count).append(". ").append(title).append("\n");
-            results.append("   Rezultāts: ").append(score).append("/").append(maxScore)
-                   .append(" (").append(percentage).append("%)\n");
-            results.append("   Datums: ").append(completedAt).append("\n\n");
-        }
-        
-        rs.close();
-        pstmt.close();
-        
-        if (count == 0) {
-            results.append("Jums vēl nav pildīti testi.");
-        }
-        
-        JTextArea textArea = new JTextArea(results.toString());
-        textArea.setEditable(false);
-        JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setPreferredSize(new Dimension(500, 300));
-        
-        JOptionPane.showMessageDialog(this, scrollPane, "Jūsu rezultāti", JOptionPane.INFORMATION_MESSAGE);
-        
-    } catch (SQLException e) {
-        JOptionPane.showMessageDialog(this, 
-            "Kļūda ielādējot rezultātus:\n" + e.getMessage(), 
-            "Kļūda", 
-            JOptionPane.ERROR_MESSAGE);
-        e.printStackTrace();
-    }
-}
-
-private Student getCurrentStudent() {
-    if (currentUser instanceof Student) {
-        return (Student) currentUser;
-    }
-    return null;
-}
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JDialog ChoiceBetweenAnswers;

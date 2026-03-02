@@ -6,7 +6,6 @@ import java.util.List;
 
 /**
  * Autentifikācijas serviss - nodrošina lietotāju reģistrāciju un ielogošanos.
- * Pielāgots darbam ar Jūsu esošo datubāzes struktūru.
  * 
  * @author A. Stankevičs
  * @version 3.0
@@ -15,34 +14,50 @@ public class AuthService {
     
     private Connection connection;
     
+    /**
+     * Izveido jaunu AuthService objektu ar norādīto datubāzes savienojumu.
+     * 
+     * @param connection aktīvs savienojums ar datubāzi
+     */
     public AuthService(Connection connection) {
         this.connection = connection;
     }
     
     /**
      * Reģistrē jaunu studentu sistēmā.
+     * 
+     * @param firstName studenta vārds
+     * @param lastName studenta uzvārds
+     * @param username studenta lietotājvārds
+     * @param password studenta parole
+     * @return izveidotais Student objekts
+     * @throws IllegalArgumentException ja dati ir nederīgi
+     * @throws SQLException ja rodas kļūda datubāzē
      */
     public Student registerStudent(String firstName, String lastName, String username, String password) 
             throws IllegalArgumentException, SQLException {
         
-        // Validācija
         validateRegistrationData(firstName, lastName, username, password);
         
-        // Pārbauda vai lietotājvārds jau eksistē
         if (isUsernameTaken(username)) {
             throw new IllegalArgumentException("Lietotājvārds '" + username + "' jau ir aizņemts!");
         }
         
-        // Saglabā datubāzē
         saveUserToDatabase(firstName, lastName, username, password, "STUDENT");
         
-        // Izveido un atgriež Student objektu (glabā pilno vārdu)
         String fullName = firstName + " " + lastName;
         return new Student(fullName, username, password);
     }
     
     /**
      * Ielogošanās sistēmā.
+     * 
+     * @param username lietotājvārds
+     * @param password parole
+     * @return User objekts atbilstoši lietotāja lomai
+     * @throws IllegalArgumentException ja dati ir tukši
+     * @throws SecurityException ja dati ir nepareizi
+     * @throws SQLException ja rodas kļūda datubāzē
      */
     public User login(String username, String password) 
             throws IllegalArgumentException, SecurityException, SQLException {
@@ -54,7 +69,6 @@ public class AuthService {
             throw new IllegalArgumentException("Lūdzu ievadiet paroli!");
         }
         
-        // Meklē lietotāju pēc username un password
         String sql = "SELECT first_name, last_name, role FROM users WHERE username = ? AND password = ?";
         
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -78,6 +92,10 @@ public class AuthService {
     
     /**
      * Pārbauda vai lietotājvārds jau eksistē.
+     * 
+     * @param username pārbaudāmais lietotājvārds
+     * @return true ja lietotājvārds ir aizņemts
+     * @throws SQLException ja rodas kļūda datubāzē
      */
     public boolean isUsernameTaken(String username) throws SQLException {
         String sql = "SELECT COUNT(*) FROM users WHERE username = ?";
@@ -90,51 +108,48 @@ public class AuthService {
     }
     
     /**
- * Pārbauda vai tabula eksistē un parāda tās struktūru
- */
-public void debugDatabaseStructure() {
-    try {
-        System.out.println("=== DATUBĀZES DEBUG INFO ===");
-        
-        // Pārbauda vai tabula eksistē
-        DatabaseMetaData meta = connection.getMetaData();
-        ResultSet tables = meta.getTables(null, null, "USERS", null);
-        if (tables.next()) {
-            System.out.println("✅ Tabula 'users' eksistē");
-        } else {
-            System.out.println("❌ Tabula 'users' NAV atrasta!");
-            return;
+     * Pārbauda datubāzes struktūru (debug metode).
+     */
+    public void debugDatabaseStructure() {
+        try {
+            System.out.println("=== DATUBĀZES DEBUG INFO ===");
+            
+            DatabaseMetaData meta = connection.getMetaData();
+            ResultSet tables = meta.getTables(null, null, "USERS", null);
+            if (tables.next()) {
+                System.out.println("✅ Tabula 'users' eksistē");
+            } else {
+                System.out.println("❌ Tabula 'users' NAV atrasta!");
+                return;
+            }
+            
+            System.out.println("Tabulas 'users' kolonnas:");
+            ResultSet columns = meta.getColumns(null, null, "USERS", null);
+            while (columns.next()) {
+                String colName = columns.getString("COLUMN_NAME");
+                String colType = columns.getString("TYPE_NAME");
+                System.out.println("  - " + colName + " (" + colType + ")");
+            }
+            
+            Statement stmt = connection.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT * FROM users FETCH FIRST 3 ROWS ONLY");
+            System.out.println("Pirmie 3 lietotāji:");
+            while (rs.next()) {
+                System.out.println("  ID: " + rs.getInt("id"));
+                System.out.println("    username: " + rs.getString("username"));
+                System.out.println("    password: " + rs.getString("password"));
+                System.out.println("    first_name: " + rs.getString("first_name"));
+                System.out.println("    last_name: " + rs.getString("last_name"));
+                System.out.println("    role: " + rs.getString("role"));
+            }
+            
+            System.out.println("=============================");
+            
+        } catch (SQLException e) {
+            System.err.println("Kļūda debugojot datubāzi: " + e.getMessage());
+            e.printStackTrace();
         }
-        
-        // Parāda tabulas kolonnas
-        System.out.println("Tabulas 'users' kolonnas:");
-        ResultSet columns = meta.getColumns(null, null, "USERS", null);
-        while (columns.next()) {
-            String colName = columns.getString("COLUMN_NAME");
-            String colType = columns.getString("TYPE_NAME");
-            System.out.println("  - " + colName + " (" + colType + ")");
-        }
-        
-        // Parāda dažus ierakstus
-        Statement stmt = connection.createStatement();
-        ResultSet rs = stmt.executeQuery("SELECT * FROM users FETCH FIRST 3 ROWS ONLY");
-        System.out.println("Pirmie 3 lietotāji:");
-        while (rs.next()) {
-            System.out.println("  ID: " + rs.getInt("id"));
-            System.out.println("    username: " + rs.getString("username"));
-            System.out.println("    password: " + rs.getString("password"));
-            System.out.println("    first_name: " + rs.getString("first_name"));
-            System.out.println("    last_name: " + rs.getString("last_name"));
-            System.out.println("    role: " + rs.getString("role"));
-        }
-        
-        System.out.println("=============================");
-        
-    } catch (SQLException e) {
-        System.err.println("Kļūda debugojot datubāzi: " + e.getMessage());
-        e.printStackTrace();
     }
-}
     
     /**
      * Validē reģistrācijas datus.
@@ -158,7 +173,7 @@ public void debugDatabaseStructure() {
     }
     
     /**
-     * Saglabā lietotāju datubāzē atbilstoši Jūsu tabulas struktūrai.
+     * Saglabā lietotāju datubāzē.
      */
     private void saveUserToDatabase(String firstName, String lastName, String username, String password, String role) 
             throws SQLException {
@@ -178,7 +193,7 @@ public void debugDatabaseStructure() {
                 throw new SQLException("Neizdevās saglabāt lietotāju datubāzē!");
             }
             
-            System.out.println("✅ Lietotājs reģistrēts: " + firstName + " " + lastName + " (" + username + ")");
+            System.out.println("Lietotājs reģistrēts: " + firstName + " " + lastName + " (" + username + ")");
         }
     }
     
@@ -199,6 +214,9 @@ public void debugDatabaseStructure() {
     
     /**
      * Atgriež visu lietotāju sarakstu.
+     * 
+     * @return List<User> ar visiem sistēmas lietotājiem
+     * @throws SQLException ja rodas kļūda datubāzē
      */
     public List<User> getAllUsers() throws SQLException {
         List<User> users = new ArrayList<>();
@@ -222,7 +240,11 @@ public void debugDatabaseStructure() {
     }
     
     /**
-     * Dzēš lietotāju.
+     * Dzēš lietotāju pēc tā lietotājvārda.
+     * 
+     * @param username dzēšamā lietotāja lietotājvārds
+     * @return true ja lietotājs tika izdzēsts
+     * @throws SQLException ja rodas kļūda datubāzē
      */
     public boolean deleteUser(String username) throws SQLException {
         String sql = "DELETE FROM users WHERE username = ?";

@@ -2,6 +2,12 @@ package pd1_stankevics_27;
 
 import java.time.LocalDateTime;
 
+/**
+ * Testa rezultātu klase.
+ * 
+ * @author stankevics_27
+ * @version 1.0
+ */
 public class Result {
     private String result_id;
     private String user_id;
@@ -12,6 +18,9 @@ public class Result {
     private LocalDateTime date_completed;
     private String comment;
 
+    /**
+     * Izveido jaunu rezultāta objektu.
+     */
     public Result(String resultId, String userId, String testId, int score,
                   double percentage, String grade, LocalDateTime dateCompleted, String comment) {
         this.result_id = resultId;
@@ -24,17 +33,18 @@ public class Result {
         this.comment = comment;
     }
 
+    /**
+     * Aprēķina procentuālo rezultātu.
+     * 
+     * @param totalQuestions kopējais jautājumu skaits
+     */
     public void calculatePercentage(int totalQuestions) {
         percentage = (double) score / totalQuestions * 100;
     }
 
-    public void assignGrade() {
-        if (percentage >= 90) grade = "10";
-        else if (percentage >= 75) grade = "8";
-        else if (percentage >= 50) grade = "6";
-        else grade = "4";
-    }
-
+    /**
+     * Atgriež rezultāta kopsavilkumu.
+     */
     public String getSummary() {
         return "Rezultāts: " + grade + " (" + percentage + "%)";
     }
