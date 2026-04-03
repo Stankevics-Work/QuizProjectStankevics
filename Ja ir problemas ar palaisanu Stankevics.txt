@@ -1,0 +1,1 @@
+Jā ir problēmas ar projekta palaišanu, ir jāpārbauda draiveri un JDK versija un, jā kas, pievienot/izmainīt tos.
